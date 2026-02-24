@@ -10,8 +10,8 @@ constructor(private configService: ConfigService) {}
 
   getHello(): string {
     const appName = this.configService.get<string>('APP_NAME', 'DefaultAppName');
-    log(`App Name from Config: ${appName}`);
+    log(`App Name from Config and validation using the joi: ${appName}`);
 
-    return 'Hello World!';
+    return `Hello World! ${appName}`;
   }
 }
