@@ -1,6 +1,8 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Put, Query, UsePipes, ValidationPipe } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import type postInterface from 'src/types/posts.interface';
+import { CreatePostDto } from './dto/create-post.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
 
 @Controller('posts')
 export class PostsController {
@@ -25,14 +27,27 @@ export class PostsController {
     @Post()
     // @HttpCode(HttpStatus.CREATED) // Set the HTTP status code to 201 Created
     @HttpCode(HttpStatus.CREATED)
-    createPost(@Body() createPostData: Omit<postInterface, 'id' | 'createdAt'>): postInterface {
+    //option 1: use global validation pipe in main.ts file
+    // option 2: use local validation pipe for this specific route
+
+    //✔ Pipes stack
+    // ✔ Global runs first
+    // ✔ Local runs after
+    // ✔ They don’t override
+    // ✔ First pipe that throws error stops execution
+
+    @UsePipes(
+        new ValidationPipe({
+           //add new options here if needed but it shouldn't be same as global options in main.ts file (to avoid confusion and conflicts)
+        }))
+    createPost(@Body() createPostData: CreatePostDto): postInterface {
         return this.postService.createPost(createPostData);
     }
 
     // example of updating an existing post using PUT method
     @Put(':id')
     @HttpCode(HttpStatus.OK) // Set the HTTP status code to 200 OK
-    updatedPost(@Body() updatedPostData: Partial<Omit<postInterface, 'id' | 'createdAt'>>, @Param('id', ParseIntPipe) id: number): postInterface {
+    updatedPost(@Body() updatedPostData: UpdatePostDto, @Param('id', ParseIntPipe) id: number): postInterface {
         return this.postService.updatePost(id, updatedPostData);
     }
 

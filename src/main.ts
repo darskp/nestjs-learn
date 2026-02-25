@@ -16,7 +16,8 @@ async function bootstrap() {
         whitelist:true, //🔐 Prevents unwanted or malicious fields.
         forbidNonWhitelisted:true, //👉 Instead of silently removing extra fields, it throws an error.
         transform:true,//👉 Automatically converts request data to the DTO type.
-      disableErrorMessages:true //If validation fails, just say Bad Request. Don’t explain why
+      // disableErrorMessages:true //If validation fails, just say Bad Request. Don’t explain why
+          disableErrorMessages: process.env.NODE_ENV === 'production'
       }
     )
   )
