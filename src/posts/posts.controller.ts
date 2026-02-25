@@ -3,6 +3,7 @@ import { PostsService } from './posts.service';
 import type postInterface from 'src/types/posts.interface';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { PostExistsPipe } from './customPipes/postExists.pipe';
 
 @Controller('posts')
 export class PostsController {
@@ -19,7 +20,7 @@ export class PostsController {
     }
 
     @Get(':id')
-    getpostById(@Param('id', ParseIntPipe) id: number): postInterface {
+    getpostById(@Param('id', ParseIntPipe,PostExistsPipe) id: number): postInterface {
         return this.postService.findPostById(id);
     }
 
@@ -47,14 +48,14 @@ export class PostsController {
     // example of updating an existing post using PUT method
     @Put(':id')
     @HttpCode(HttpStatus.OK) // Set the HTTP status code to 200 OK
-    updatedPost(@Body() updatedPostData: UpdatePostDto, @Param('id', ParseIntPipe) id: number): postInterface {
+    updatedPost(@Body() updatedPostData: UpdatePostDto, @Param('id', ParseIntPipe,PostExistsPipe) id: number): postInterface {
         return this.postService.updatePost(id, updatedPostData);
     }
 
     // example of deleting a post using DELETE method
     @Delete(':id')
-    @HttpCode(HttpStatus.NO_CONTENT) // Set the HTTP status code to 204 No Content
-    deletePost(@Param('id', ParseIntPipe) id: number): String {
+    @HttpCode(HttpStatus.OK) // Set the HTTP status code to 204 No Content
+    deletePost(@Param('id', ParseIntPipe,PostExistsPipe) id: number): String {
         return this.postService.deletePost(id);
     }
 
