@@ -66,4 +66,68 @@ export class PostsService {
         this.posts.splice(postIndex, 1);
         return `Post with id ${id} has been deleted successfully`;
     }
+
+    // Add a tag to a post
+    addTagToPost(id: number, tag: string): postInterface {
+        const post = this.posts.find(post => post.id === id);
+        if (!post) {
+            throw new NotFoundException(`Post with id ${id} not found`);
+        }
+        if (!post.tags) {
+            post.tags = [];
+        }
+        post.tags.push(tag);
+        return post;
+    }
+
+    // Remove a tag from a post
+    removeTagFromPost(id: number, tag: string): postInterface {
+        const post = this.posts.find(post => post.id === id);
+        if (!post) {
+            throw new NotFoundException(`Post with id ${id} not found`);
+        }
+        if (!post.tags) {
+            throw new NotFoundException(`No tags found for post with id ${id}`);
+        }
+        post.tags = post.tags.filter(t => t !== tag);
+        return post;
+    }
+
+    // Add a comment to a post
+    addCommentToPost(id: number, comment: { user: string; text: string; date?: Date }): postInterface {
+        const post = this.posts.find(post => post.id === id);
+        if (!post) {
+            throw new NotFoundException(`Post with id ${id} not found`);
+        }
+        if (!post.comments) {
+            post.comments = [];
+        }
+        post.comments.push({ ...comment, date: comment.date || new Date() });
+        return post;
+    }
+
+    // Remove a comment from a post by index
+    removeCommentFromPost(id: number, index: number): postInterface {
+        const post = this.posts.find(post => post.id === id);
+        if (!post) {
+            throw new NotFoundException(`Post with id ${id} not found`);
+        }
+        if (!post.comments || index < 0 || index >= post.comments.length) {
+            throw new NotFoundException(`Comment not found for post with id ${id}`);
+        }
+        post.comments.splice(index, 1);
+        return post;
+    }
+    // Update metadata for a post
+    updateMetadata(id: number, metadata: { views?: number; likes?: number }): postInterface {
+        const post = this.posts.find(post => post.id === id);
+        if (!post) {
+            throw new NotFoundException(`Post with id ${id} not found`);
+        }
+        if (!post.metadata) {
+            post.metadata = { views: 0, likes: 0 };
+        }
+        post.metadata = { ...post.metadata, ...metadata };
+        return post;
+    }
 }

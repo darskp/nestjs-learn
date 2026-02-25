@@ -54,11 +54,58 @@ export class PostsController {
 
     // example of deleting a post using DELETE method
     @Delete(':id')
-    @HttpCode(HttpStatus.OK) // Set the HTTP status code to 204 No Content
-    deletePost(@Param('id', ParseIntPipe,PostExistsPipe) id: number): String {
+    @HttpCode(HttpStatus.OK)
+    deletePost(@Param('id', ParseIntPipe, PostExistsPipe) id: number): String {
         return this.postService.deletePost(id);
     }
 
+    // Add a tag to a post
+    @Post(':id/tags')
+    @HttpCode(HttpStatus.OK)
+    addTag(
+        @Param('id', ParseIntPipe, PostExistsPipe) id: number,
+        @Body('tag') tag: string
+    ): postInterface {
+        return this.postService.addTagToPost(id, tag);
+    }
 
+    // Remove a tag from a post
+    @Delete(':id/tags/:tag')
+    @HttpCode(HttpStatus.OK)
+    removeTag(
+        @Param('id', ParseIntPipe, PostExistsPipe) id: number,
+        @Param('tag') tag: string
+    ): postInterface {
+        return this.postService.removeTagFromPost(id, tag);
+    }
 
+    // Add a comment to a post
+    @Post(':id/comments')
+    @HttpCode(HttpStatus.OK)
+    addComment(
+        @Param('id', ParseIntPipe, PostExistsPipe) id: number,
+        @Body() comment: { user: string; text: string; date?: Date }
+    ): postInterface {
+        return this.postService.addCommentToPost(id, comment);
+    }
+
+    // Remove a comment from a post by index
+    @Delete(':id/comments/:index')
+    @HttpCode(HttpStatus.OK)
+    removeComment(
+        @Param('id', ParseIntPipe, PostExistsPipe) id: number,
+        @Param('index') index: number
+    ): postInterface {
+        return this.postService.removeCommentFromPost(id, index);
+    }
+
+    // Update metadata for a post
+    @Put(':id/metadata')
+    @HttpCode(HttpStatus.OK)
+    updateMetadata(
+        @Param('id', ParseIntPipe, PostExistsPipe) id: number,
+        @Body() metadata: { views?: number; likes?: number }
+    ): postInterface {
+        return this.postService.updateMetadata(id, metadata);
+    }
 }
