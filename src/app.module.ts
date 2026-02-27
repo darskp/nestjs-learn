@@ -2,9 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { HelloModule } from './hello/hello.module';
-import { UserModule } from './user/user.module';
-import { OrderModule } from './order/order.module';
 import { ConfigModule } from '@nestjs/config';
 import { PostsController } from './posts/posts.controller';
 import { PostsService } from './posts/posts.service';
@@ -13,6 +10,7 @@ import { PostsModule } from './posts/posts.module';
 import appConfig from './config/app.config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Post } from './posts/entities/post.entity';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -37,7 +35,7 @@ import { Post } from './posts/entities/post.entity';
         synchronize: true,
       }),
     }),
-    HelloModule, UserModule, OrderModule, PostsModule
+ PostsModule, AuthModule
   ],
   controllers: [AppController, PostsController],
   providers: [AppService],
