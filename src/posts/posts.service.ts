@@ -1,133 +1,159 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import postInterface from 'src/types/posts.interface';
+import { Post } from './entities/post.entity';
+import { Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { CreatePostDto } from './dto/create-post.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
 
 @Injectable()
 export class PostsService {
-    private posts: postInterface[] = [
-        {
-            id: 1, title: 'First Post',
-            content: 'This is the first post',
-            author: 'John Doe',
-            // createdAt: 2026-02-24T12:17:53.046Z"
-        },
-        {
-            id: 2, title: 'Second Post',
-            content: 'This is the second post',
-            author: 'Jane Doe',
-            // createdAt: "2026-02-24T12:17:53.046Z"
+    // private posts: postInterface[] = [
+    //     {
+    //         id: 1, title: 'First Post',
+    //         content: 'This is the first post',
+    //         author: 'John Doe',
+    //         // createdAt: 2026-02-24T12:17:53.046Z"
+    //     },
+    //     {
+    //         id: 2, title: 'Second Post',
+    //         content: 'This is the second post',
+    //         author: 'Jane Doe',
+    //         // createdAt: "2026-02-24T12:17:53.046Z"
 
-        },
-    ];
+    //     },
+    // ];
 
-    findAllPosts(): postInterface[] {
-        return this.posts;
+    constructor(
+        @InjectRepository(Post)
+        private postsRepository: Repository<Post>
+    ) { }
+
+    async findAllPosts(): Promise<Post[]> {
+        return this.postsRepository.find();
     }
 
-    findPostById(id: number): postInterface {
-        const post = this.posts.find(post => post.id === id);
+    async findPostsByTitle(title: string): Promise<Post[]> {
+        return this.postsRepository.find({
+            where: {
+                title: title
+            }
+        });
+    }
+
+    async findPostById(id: number): Promise<Post> {
+        const post = await this.postsRepository.findOneBy({ id });
         if (!post) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
         return post;
     }
 
-    private getNextId(): number {
-        return this.posts.length > 0 ? Math.max(...this.posts.map(post => post.id)) + 1 : 1;
-    }
-
-    createPost(createPostData: Omit<postInterface, 'id' | 'createdAt'>) {
-        const newPost: postInterface = {
-            id: this.getNextId(),
+    async createPost(createPostData: CreatePostDto): Promise<Post> {
+        const newPost = this.postsRepository.create({
             title: createPostData.title,
             content: createPostData.content,
             author: createPostData.author,
-            createdAt: new Date()
-        };
-        this.posts.push(newPost);
+            tags: createPostData.tags ?? [],
+            comments: createPostData.comments ?? [],
+            metadata: createPostData.metadata ?? { views: 0, likes: 0 },
+        });
+        await this.postsRepository.save(newPost);
         return newPost;
     }
 
-    updatePost(id: number, updatePostData: Partial<Omit<postInterface, 'id' | 'createdAt'>>): postInterface {
-        const post = this.posts.findIndex(post => post.id === id);
-        if (post === -1) {
+    async updatePost(id: number, updatePostData: UpdatePostDto): Promise<Post> {
+        const findPostToUpdate = await this.findPostById(id);
+        if (!findPostToUpdate) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
-
-        const updatedPost = { ...this.posts[post], ...updatePostData, updatedAt: new Date(), };
-        this.posts[post] = updatedPost;
+        const updatedPost = this.postsRepository.merge(findPostToUpdate, updatePostData);
+        await this.postsRepository.save(updatedPost);
         return updatedPost;
+
     }
 
-    deletePost(id: number): String {
-        const postIndex = this.posts.findIndex(post => post.id === id);
-        if (postIndex === -1) {
+    async deletePost(id: number): Promise<string> {
+        const findPostToDelete = await this.findPostById(id);
+        if (!findPostToDelete) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
-        this.posts.splice(postIndex, 1);
+        const deleteResult = await this.postsRepository.delete(id);
+        if (deleteResult.affected === 0) {
+            throw new NotFoundException(`Post with id ${id} not found`);
+        }
         return `Post with id ${id} has been deleted successfully`;
     }
 
     // Add a tag to a post
-    addTagToPost(id: number, tag: string): postInterface {
-        const post = this.posts.find(post => post.id === id);
-        if (!post) {
+    async addTagToPost(id: number, tag: string): Promise<Post> {
+        const findPostToAddTag = await this.findPostById(id);
+        if (!findPostToAddTag) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
-        if (!post.tags) {
-            post.tags = [];
+        if (!findPostToAddTag.tags) {
+            findPostToAddTag.tags = [];
         }
-        post.tags.push(tag);
-        return post;
+        findPostToAddTag.tags.push(tag);
+        await this.postsRepository.save(findPostToAddTag);
+        return findPostToAddTag;
     }
 
     // Remove a tag from a post
-    removeTagFromPost(id: number, tag: string): postInterface {
-        const post = this.posts.find(post => post.id === id);
-        if (!post) {
+    async removeTagFromPost(id: number, tag: string): Promise<Post> {
+        const removeTagFromPost = await this.findPostById(id);
+        if (!removeTagFromPost) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
-        if (!post.tags) {
+        if (!removeTagFromPost.tags) {
             throw new NotFoundException(`No tags found for post with id ${id}`);
         }
-        post.tags = post.tags.filter(t => t !== tag);
-        return post;
+        removeTagFromPost.tags = removeTagFromPost.tags.filter(t => t !== tag);
+        await this.postsRepository.save(removeTagFromPost);
+        return removeTagFromPost;
     }
 
     // Add a comment to a post
-    addCommentToPost(id: number, comment: { user: string; text: string; date?: Date }): postInterface {
-        const post = this.posts.find(post => post.id === id);
+    async addCommentToPost(id: number, comment: { user: string; text: string; date?: Date }): Promise<Post> {
+        const post = await this.findPostById(id);
         if (!post) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
         if (!post.comments) {
             post.comments = [];
         }
-        post.comments.push({ ...comment, date: comment.date || new Date() });
+        post.comments.push({
+            user: comment.user,
+            text: comment.text,
+            date: comment.date ?? new Date(),
+        });
+        await this.postsRepository.save(post);
         return post;
     }
 
     // Remove a comment from a post by index
-    removeCommentFromPost(id: number, index: number): postInterface {
-        const post = this.posts.find(post => post.id === id);
+    async removeCommentFromPost(id: number, index: number): Promise<Post> {
+        const post = await this.findPostById(id);
         if (!post) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
         if (!post.comments || index < 0 || index >= post.comments.length) {
-            throw new NotFoundException(`Comment not found for post with id ${id}`);
+            throw new NotFoundException(`Comment at index ${index} not found for post with id ${id}`);
         }
         post.comments.splice(index, 1);
+        await this.postsRepository.save(post);
         return post;
     }
     // Update metadata for a post
-    updateMetadata(id: number, metadata: { views?: number; likes?: number }): postInterface {
-        const post = this.posts.find(post => post.id === id);
+    async updateMetadata(id: number, metadata: { views?: number; likes?: number }): Promise<Post> {
+        const post = await this.findPostById(id);
         if (!post) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
-        if (!post.metadata) {
-            post.metadata = { views: 0, likes: 0 };
-        }
-        post.metadata = { ...post.metadata, ...metadata };
+        post.metadata = {
+            views: metadata.views ?? post.metadata?.views ?? 0,
+            likes: metadata.likes ?? post.metadata?.likes ?? 0,
+        };
+        await this.postsRepository.save(post);
         return post;
     }
 }
