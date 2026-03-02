@@ -4,14 +4,15 @@ import { User, UserRole } from './entities/user.entity';
 import { Repository } from 'typeorm';
 import { RegisterDto } from './dto/register.dto';
 import * as bcrypt from 'bcrypt';
-import { promises } from 'dns';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
 
     constructor(
         @InjectRepository(User)
-        private userRepository: Repository<User>
+        private userRepository: Repository<User>,
+        private jwtService: JwtService,
     ) { }
 
     async registerUser(registerData: RegisterDto) {
@@ -23,7 +24,7 @@ export class AuthService {
             email: registerData.email,
             name: registerData.name,
             password: await this.hashedPassword(registerData.password),
-            role: UserRole.USER 
+            role: UserRole.USER
         });
         const savedUser = await this.userRepository.save(newUser);
         const { password, ...result } = savedUser;
@@ -33,7 +34,7 @@ export class AuthService {
         }
     }
 
-     async createAdmin(adminData: RegisterDto) {
+    async createAdmin(adminData: RegisterDto) {
         const existingUser = await this.userRepository.findOneBy({ email: adminData.email });
         if (existingUser) {
             throw new ConflictException('Email already in use');
@@ -42,7 +43,7 @@ export class AuthService {
             email: adminData.email,
             name: adminData.name,
             password: await this.hashedPassword(adminData.password),
-            role: UserRole.ADMIN 
+            role: UserRole.ADMIN
         });
         const savedAdminData = await this.userRepository.save(newAdmin);
         const { password, ...result } = savedAdminData;
@@ -57,12 +58,51 @@ export class AuthService {
         if (!user || !await bcrypt.compare(password, user.password)) {
             throw new UnauthorizedException('Invalid credentials or account does not exist');
         }
-        // const tokens = await this.generateTokens(user);
+
+        const tokens = await this.generateTokens(user);
         const { password: _, ...result } = user;
         return {
             user: result,
             ...tokens,
             message: 'Login successful! Welcome back.'
+        }
+    }
+    private async generateTokens(user: User) {
+        const accessToken = await this.generateAccessToken(user);
+        const refreshToken = await this.generateRefreshToken(user);
+        return { accessToken, refreshToken };
+    }
+
+    private async generateAccessToken(user: User): Promise<string> {
+        const payload = { sub: user.id, email: user.email, role: user.role };
+        const accessToken = await this.jwtService.signAsync(payload, {
+            secret: process.env.ACCESS_TOKEN_SECRET,
+            expiresIn: '15m'
+        });
+        return accessToken;
+    }
+
+    private async generateRefreshToken(user: User): Promise<string> {
+        const payload = { sub: user.id, email: user.email, role: user.role };
+        const refreshToken= await this.jwtService.signAsync(payload, {
+            secret: process.env.REFRESH_TOKEN_SECRET,
+            expiresIn: '7d'
+        });
+        return refreshToken;
+    }
+
+    async refreshToken(token:string) {
+        try {
+            const payload = await this.jwtService.verify(token, { secret: process.env.REFRESH_TOKEN_SECRET });
+            const user = await this.userRepository.findOneBy({ id: payload.sub });
+            if (!user) {
+                throw new UnauthorizedException('Invalid refresh token');
+            }
+            return {
+                accessToken: await this.generateAccessToken(user),
+            }
+        } catch (error) {
+            throw new UnauthorizedException('Invalid refresh token');
         }
     }
 
