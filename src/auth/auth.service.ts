@@ -106,6 +106,14 @@ export class AuthService {
         }
     }
 
+    async validateUser(userId: number): Promise<Omit<User, 'password'>> {
+        const user = await this.userRepository.findOneBy({ id: userId });
+        if (!user) {
+            throw new UnauthorizedException('User not found');
+        }
+        const { password, ...result } = user;
+        return result;
+    }
 
     private async hashedPassword(password: string): Promise<string> {
         return await bcrypt.hash(password, 10);
