@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
-import { User } from '../auth/entities/user.entity';
+import { User, UserRole } from '../auth/entities/user.entity';
 
 @Injectable()
 export class PostsService {
@@ -72,7 +72,7 @@ export class PostsService {
         if (!findPostToUpdate) {
     throw new NotFoundException(`Post with id ${id} not found`);
   }
-        if (findPostToUpdate.author.id !== user.id) {
+        if (findPostToUpdate.author.id !== user.id && user.role !== UserRole.ADMIN) {
             throw new NotFoundException(`You are not authorized to update this post`);
   }
   const updatedPost = this.postsRepository.merge(findPostToUpdate, updatePostData);
@@ -86,7 +86,7 @@ export class PostsService {
         if (!findPostToDelete) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
-        if (findPostToDelete.author.id !== user.id) {
+        if (findPostToDelete.author.id !== user.id && user.role !== UserRole.ADMIN) {
             throw new NotFoundException(`You are not authorized to delete this post`);
         }
         const deleteResult = await this.postsRepository.delete(id);
