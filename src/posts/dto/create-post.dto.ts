@@ -22,13 +22,7 @@ export class CreatePostDto {
   @IsString({ message: 'Content must be a string' })
   @MinLength(5, { message: 'Content must be at least 3 charaters long' })
   content: string;
-
-  @IsNotEmpty({ message: 'Author is required' })
-  @IsString({ message: 'Author must be a string' })
-  @MinLength(2, { message: 'Author must be at least 2 charaters long' })
-  @MaxLength(25, { message: 'Title can not be longer than 25 charaters' })
-  author: string;
-
+  
   @IsOptional()
   tags?: string[];
 

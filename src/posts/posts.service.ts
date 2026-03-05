@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Post } from './entities/post.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { User } from '../auth/entities/user.entity';
 
 @Injectable()
 export class PostsService {
@@ -29,7 +30,9 @@ export class PostsService {
     ) { }
 
     async findAllPosts(): Promise<Post[]> {
-        return this.postsRepository.find();
+        return this.postsRepository.find({
+            relations: ['author']
+        });
     }
 
     async findPostsByTitle(title: string): Promise<Post[]> {
@@ -41,18 +44,21 @@ export class PostsService {
     }
 
     async findPostById(id: number): Promise<Post> {
-        const post = await this.postsRepository.findOneBy({ id });
+        const post = await this.postsRepository.findOne({
+            where: { id },
+            relations: ['author']
+        });
         if (!post) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
         return post;
     }
 
-    async createPost(createPostData: CreatePostDto): Promise<Post> {
+    async createPost(createPostData: CreatePostDto, user: User): Promise<Post> {
         const newPost = this.postsRepository.create({
             title: createPostData.title,
             content: createPostData.content,
-            author: createPostData.author,
+            author: { id: user.id, name: user.name, email: user.email },
             tags: createPostData.tags ?? [],
             comments: createPostData.comments ?? [],
             metadata: createPostData.metadata ?? { views: 0, likes: 0 },
@@ -61,21 +67,27 @@ export class PostsService {
         return newPost;
     }
 
-    async updatePost(id: number, updatePostData: UpdatePostDto): Promise<Post> {
+   async updatePost(id: number, updatePostData: UpdatePostDto,user: User): Promise<Post> {
         const findPostToUpdate = await this.findPostById(id);
         if (!findPostToUpdate) {
-            throw new NotFoundException(`Post with id ${id} not found`);
-        }
-        const updatedPost = this.postsRepository.merge(findPostToUpdate, updatePostData);
+    throw new NotFoundException(`Post with id ${id} not found`);
+  }
+        if (findPostToUpdate.author.id !== user.id) {
+            throw new NotFoundException(`You are not authorized to update this post`);
+  }
+  const updatedPost = this.postsRepository.merge(findPostToUpdate, updatePostData);
         await this.postsRepository.save(updatedPost);
         return updatedPost;
 
-    }
+}
 
-    async deletePost(id: number): Promise<string> {
+    async deletePost(id: number,user:User): Promise<string> {
         const findPostToDelete = await this.findPostById(id);
         if (!findPostToDelete) {
             throw new NotFoundException(`Post with id ${id} not found`);
+        }
+        if (findPostToDelete.author.id !== user.id) {
+            throw new NotFoundException(`You are not authorized to delete this post`);
         }
         const deleteResult = await this.postsRepository.delete(id);
         if (deleteResult.affected === 0) {
