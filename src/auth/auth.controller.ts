@@ -7,6 +7,7 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Roles } from './decorators/roles.decorators';
 import { RolesGuard } from './guards/roles-guard';
+import { LoginThrottlerGuard } from './guards/login-throttler.guards';
 
 @Controller('auth')
 export class AuthController {
@@ -23,6 +24,7 @@ export class AuthController {
     }
 
     @Post('login')
+    @UseGuards(LoginThrottlerGuard)
     @HttpCode(HttpStatus.OK)
     async userLogin(
         @Body() data: LoginDto
