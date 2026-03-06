@@ -10,6 +10,7 @@ import type { Cache } from 'cache-manager';
 
 @Injectable()
 export class PostsService {
+    private postListCachekeys: Set<string> = new Set();
     // private posts: postInterface[] = [
     //     {
     //         id: 1, title: 'First Post',
@@ -49,7 +50,7 @@ export class PostsService {
 
     async findPostById(id: number): Promise<Post> {
         const cachedKey = `post_${id}`;
-
+        this.postListCachekeys.add(cachedKey);
         const cachedPost = await this.cacheManager.get<Post>(cachedKey);
 
         if (cachedPost) {
@@ -81,6 +82,7 @@ export class PostsService {
             metadata: createPostData.metadata ?? { views: 0, likes: 0 },
         });
         await this.postsRepository.save(newPost);
+        await this.invalidateExistingCache()
         return newPost;
     }
 
@@ -93,6 +95,8 @@ export class PostsService {
             throw new NotFoundException(`You are not authorized to update this post`);
         }
         const updatedPost = this.postsRepository.merge(findPostToUpdate, updatePostData);
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         await this.postsRepository.save(updatedPost);
         return updatedPost;
 
@@ -110,7 +114,21 @@ export class PostsService {
         if (deleteResult.affected === 0) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         return `Post with id ${id} has been deleted successfully`;
+    }
+
+    private async invalidateExistingCache(): Promise<void> {
+        console.log(
+            `Invalidating ${this.postListCachekeys.size} list cache entries`,
+        );
+
+        for (const key of this.postListCachekeys) {
+            await this.cacheManager.del(key);
+        }
+
+        this.postListCachekeys.clear();
     }
 
     // Add a tag to a post
@@ -123,6 +141,8 @@ export class PostsService {
             findPostToAddTag.tags = [];
         }
         findPostToAddTag.tags.push(tag);
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         await this.postsRepository.save(findPostToAddTag);
         return findPostToAddTag;
     }
@@ -137,6 +157,8 @@ export class PostsService {
             throw new NotFoundException(`No tags found for post with id ${id}`);
         }
         removeTagFromPost.tags = removeTagFromPost.tags.filter(t => t !== tag);
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         await this.postsRepository.save(removeTagFromPost);
         return removeTagFromPost;
     }
@@ -155,6 +177,8 @@ export class PostsService {
             text: comment.text,
             date: comment.date ?? new Date(),
         });
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         await this.postsRepository.save(post);
         return post;
     }
@@ -169,6 +193,8 @@ export class PostsService {
             throw new NotFoundException(`Comment at index ${index} not found for post with id ${id}`);
         }
         post.comments.splice(index, 1);
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         await this.postsRepository.save(post);
         return post;
     }
@@ -182,6 +208,8 @@ export class PostsService {
             views: metadata.views ?? post.metadata?.views ?? 0,
             likes: metadata.likes ?? post.metadata?.likes ?? 0,
         };
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         await this.postsRepository.save(post);
         return post;
     }
