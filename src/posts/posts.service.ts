@@ -1,10 +1,12 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Post } from './entities/post.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { User, UserRole } from '../auth/entities/user.entity';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 
 @Injectable()
 export class PostsService {
@@ -26,7 +28,9 @@ export class PostsService {
 
     constructor(
         @InjectRepository(Post)
-        private postsRepository: Repository<Post>
+        private postsRepository: Repository<Post>,
+        @Inject(CACHE_MANAGER)
+        private cacheManager: Cache,
     ) { }
 
     async findAllPosts(): Promise<Post[]> {
@@ -44,13 +48,26 @@ export class PostsService {
     }
 
     async findPostById(id: number): Promise<Post> {
+        const cachedKey = `post_${id}`;
+
+        const cachedPost = await this.cacheManager.get<Post>(cachedKey);
+
+        if (cachedPost) {
+            console.log("cache hit");
+            return cachedPost;
+        }
+        console.log("cache miss");
+
         const post = await this.postsRepository.findOne({
             where: { id },
-            relations: ['author']
+            relations: ['author'],
         });
+
         if (!post) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
+
+        await this.cacheManager.set(cachedKey, post, 30000);
         return post;
     }
 
@@ -67,21 +84,21 @@ export class PostsService {
         return newPost;
     }
 
-   async updatePost(id: number, updatePostData: UpdatePostDto,user: User): Promise<Post> {
+    async updatePost(id: number, updatePostData: UpdatePostDto, user: User): Promise<Post> {
         const findPostToUpdate = await this.findPostById(id);
         if (!findPostToUpdate) {
-    throw new NotFoundException(`Post with id ${id} not found`);
-  }
+            throw new NotFoundException(`Post with id ${id} not found`);
+        }
         if (findPostToUpdate.author.id !== user.id && user.role !== UserRole.ADMIN) {
             throw new NotFoundException(`You are not authorized to update this post`);
-  }
-  const updatedPost = this.postsRepository.merge(findPostToUpdate, updatePostData);
+        }
+        const updatedPost = this.postsRepository.merge(findPostToUpdate, updatePostData);
         await this.postsRepository.save(updatedPost);
         return updatedPost;
 
-}
+    }
 
-    async deletePost(id: number,user:User): Promise<string> {
+    async deletePost(id: number, user: User): Promise<string> {
         const findPostToDelete = await this.findPostById(id);
         if (!findPostToDelete) {
             throw new NotFoundException(`Post with id ${id} not found`);

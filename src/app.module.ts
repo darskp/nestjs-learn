@@ -13,9 +13,15 @@ import { Post } from './posts/entities/post.entity';
 import { AuthModule } from './auth/auth.module';
 import { User } from './auth/entities/user.entity';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
   imports: [
+    CacheModule.register({
+      ttl: 180, // 3 minutes
+      max: 100,
+      isGlobal: true
+    }),
     ThrottlerModule.forRoot({
       throttlers: [
         {
@@ -45,7 +51,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
         synchronize: true,
       }),
     }),
- PostsModule, AuthModule
+    PostsModule, AuthModule
   ],
   controllers: [AppController, PostsController],
   providers: [AppService],
