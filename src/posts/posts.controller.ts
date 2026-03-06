@@ -7,17 +7,17 @@ import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostExistsPipe } from './customPipes/postExists.pipe';
 import { Post as PostEntity } from './entities/post.entity';
+import { FindPostsQueryDto } from './dto/find-posts-query.dto';
+import { PaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
 
 @Controller('posts')
 export class PostsController {
     constructor(private readonly postService: PostsService) { }
 
     @Get('')
-   async getAllPosts(@Query('title') title: string): Promise<PostEntity[]> {
-        if (title) {
-            return this.postService.findPostsByTitle(title);
-        }
-        return this.postService.findAllPosts();
+   async getAllPosts(
+    @Query() query: FindPostsQueryDto): Promise<PaginatedResponse<PostEntity>> {
+        return this.postService.findAllPosts(query);
     }
 
     @Get(':id')

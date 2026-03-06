@@ -7,6 +7,8 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { User, UserRole } from '../auth/entities/user.entity';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
+import { FindPostsQueryDto } from './dto/find-posts-query.dto';
+import { PaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
 
 @Injectable()
 export class PostsService {
@@ -34,10 +36,60 @@ export class PostsService {
         private cacheManager: Cache,
     ) { }
 
-    async findAllPosts(): Promise<Post[]> {
-        return this.postsRepository.find({
-            relations: ['author']
-        });
+    private generatePostsListCacheKey(query: FindPostsQueryDto): string {
+        const { page = 1, limit = 10, title } = query;
+        return `posts_list_page${page}_limit${limit}_title${title || 'all'}`;
+    }
+
+    // async findAllPosts(): Promise<Post[]> {
+    //     return this.postsRepository.find({
+    //         relations: ['author']
+    //     });
+    // }
+
+    //findAll Posts With Pagination
+    async findAllPosts(query: FindPostsQueryDto): Promise<PaginatedResponse<Post>> {
+        const cacheKey = this.generatePostsListCacheKey(query);
+
+        this.postListCachekeys.add(cacheKey);
+
+        const getCachedData =
+            await this.cacheManager.get<PaginatedResponse<Post>>(cacheKey);
+        if (getCachedData) {
+            console.log("cache hit");
+            return getCachedData;
+        }
+        console.log("cache miss");
+        const { page = 1, limit = 10, title } = query;
+        const skip = (page - 1) * limit;
+
+        const queryBuilder = this.postsRepository
+            .createQueryBuilder('post')
+            .leftJoinAndSelect('post.author', 'author')
+            .orderBy('post.createdAt', 'DESC')
+            .skip(skip)
+            .take(limit);
+
+        if (title) {
+            queryBuilder.andWhere('post.title ILIKE :title', { title: `%${title}%` });
+        }
+
+        const [items, totalItems] = await queryBuilder.getManyAndCount();
+
+        const totalPages = Math.ceil(totalItems / limit);
+        const responseResult = {
+            data: items,
+            meta: {
+                currentPage: page,
+                itemsPerPage: limit,
+                totalItems,
+                totalPages,
+                hasPreviousPage: page > 1,
+                hasNextPage: page < totalPages,
+            },
+        };
+        await this.cacheManager.set(cacheKey, responseResult, 30000);
+        return responseResult;
     }
 
     async findPostsByTitle(title: string): Promise<Post[]> {
