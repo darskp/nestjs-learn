@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { User } from "src/auth/entities/user.entity";
+import { Column, CreateDateColumn, Entity, ManyToMany, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
 @Entity()
 //entity means table in database
@@ -14,8 +15,8 @@ export class Post {
     @Column({length: 1000, nullable: false,type:'varchar', })
     content: string;
 
-    @Column({length: 100, nullable: false,type:'varchar', })
-    author: string;
+    @ManyToOne(() => User, user => user.posts)
+    author: User;
 
     @CreateDateColumn({nullable:true, type:'timestamp', default: () => 'CURRENT_TIMESTAMP'})
     createdAt: Date;

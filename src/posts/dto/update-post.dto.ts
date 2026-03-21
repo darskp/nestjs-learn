@@ -13,4 +13,23 @@ export class UpdatePostDto {
   @IsString({ message: 'Content must be a string' })
   @MinLength(5, { message: 'Content must be at least 3 charaters long' })
   content?: string;
+
+  @IsOptional()
+  tags?: string[];
+
+  @IsOptional()
+  comments?: Array<{
+    user: string;
+    text: string;
+    date: Date;
+  }>;
+
+  @IsOptional()
+  metadata?: {
+    views: number;
+    likes: number;
+  };
+
+  @IsOptional()
+  attachments?: string[];
 }

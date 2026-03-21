@@ -1,12 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Post } from './entities/post.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { User, UserRole } from '../auth/entities/user.entity';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
+import { FindPostsQueryDto } from './dto/find-posts-query.dto';
+import { PaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
 
 @Injectable()
 export class PostsService {
+    private postListCachekeys: Set<string> = new Set();
     // private posts: postInterface[] = [
     //     {
     //         id: 1, title: 'First Post',
@@ -25,11 +31,65 @@ export class PostsService {
 
     constructor(
         @InjectRepository(Post)
-        private postsRepository: Repository<Post>
+        private postsRepository: Repository<Post>,
+        @Inject(CACHE_MANAGER)
+        private cacheManager: Cache,
     ) { }
 
-    async findAllPosts(): Promise<Post[]> {
-        return this.postsRepository.find();
+    private generatePostsListCacheKey(query: FindPostsQueryDto): string {
+        const { page = 1, limit = 10, title } = query;
+        return `posts_list_page${page}_limit${limit}_title${title || 'all'}`;
+    }
+
+    // async findAllPosts(): Promise<Post[]> {
+    //     return this.postsRepository.find({
+    //         relations: ['author']
+    //     });
+    // }
+
+    //findAll Posts With Pagination
+    async findAllPosts(query: FindPostsQueryDto): Promise<PaginatedResponse<Post>> {
+        const cacheKey = this.generatePostsListCacheKey(query);
+
+        this.postListCachekeys.add(cacheKey);
+
+        const getCachedData =
+            await this.cacheManager.get<PaginatedResponse<Post>>(cacheKey);
+        if (getCachedData) {
+            console.log("cache hit");
+            return getCachedData;
+        }
+        console.log("cache miss");
+        const { page = 1, limit = 10, title } = query;
+        const skip = (page - 1) * limit;
+
+        const queryBuilder = this.postsRepository
+            .createQueryBuilder('post')
+            .leftJoinAndSelect('post.author', 'author')
+            .orderBy('post.createdAt', 'DESC')
+            .skip(skip)
+            .take(limit);
+
+        if (title) {
+            queryBuilder.andWhere('post.title ILIKE :title', { title: `%${title}%` });
+        }
+
+        const [items, totalItems] = await queryBuilder.getManyAndCount();
+
+        const totalPages = Math.ceil(totalItems / limit);
+        const responseResult = {
+            data: items,
+            meta: {
+                currentPage: page,
+                itemsPerPage: limit,
+                totalItems,
+                totalPages,
+                hasPreviousPage: page > 1,
+                hasNextPage: page < totalPages,
+            },
+        };
+        await this.cacheManager.set(cacheKey, responseResult, 30000);
+        return responseResult;
     }
 
     async findPostsByTitle(title: string): Promise<Post[]> {
@@ -41,47 +101,86 @@ export class PostsService {
     }
 
     async findPostById(id: number): Promise<Post> {
-        const post = await this.postsRepository.findOneBy({ id });
+        const cachedKey = `post_${id}`;
+        this.postListCachekeys.add(cachedKey);
+        const cachedPost = await this.cacheManager.get<Post>(cachedKey);
+
+        if (cachedPost) {
+            console.log("cache hit");
+            return cachedPost;
+        }
+        console.log("cache miss");
+
+        const post = await this.postsRepository.findOne({
+            where: { id },
+            relations: ['author'],
+        });
+
         if (!post) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
+
+        await this.cacheManager.set(cachedKey, post, 30000);
         return post;
     }
 
-    async createPost(createPostData: CreatePostDto): Promise<Post> {
+    async createPost(createPostData: CreatePostDto, user: User): Promise<Post> {
         const newPost = this.postsRepository.create({
             title: createPostData.title,
             content: createPostData.content,
-            author: createPostData.author,
+            author: { id: user.id, name: user.name, email: user.email },
             tags: createPostData.tags ?? [],
             comments: createPostData.comments ?? [],
             metadata: createPostData.metadata ?? { views: 0, likes: 0 },
         });
         await this.postsRepository.save(newPost);
+        await this.invalidateExistingCache()
         return newPost;
     }
 
-    async updatePost(id: number, updatePostData: UpdatePostDto): Promise<Post> {
+    async updatePost(id: number, updatePostData: UpdatePostDto, user: User): Promise<Post> {
         const findPostToUpdate = await this.findPostById(id);
         if (!findPostToUpdate) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
+        if (findPostToUpdate.author.id !== user.id && user.role !== UserRole.ADMIN) {
+            throw new NotFoundException(`You are not authorized to update this post`);
+        }
         const updatedPost = this.postsRepository.merge(findPostToUpdate, updatePostData);
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         await this.postsRepository.save(updatedPost);
         return updatedPost;
 
     }
 
-    async deletePost(id: number): Promise<string> {
+    async deletePost(id: number, user: User): Promise<string> {
         const findPostToDelete = await this.findPostById(id);
         if (!findPostToDelete) {
             throw new NotFoundException(`Post with id ${id} not found`);
+        }
+        if (findPostToDelete.author.id !== user.id && user.role !== UserRole.ADMIN) {
+            throw new NotFoundException(`You are not authorized to delete this post`);
         }
         const deleteResult = await this.postsRepository.delete(id);
         if (deleteResult.affected === 0) {
             throw new NotFoundException(`Post with id ${id} not found`);
         }
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         return `Post with id ${id} has been deleted successfully`;
+    }
+
+    private async invalidateExistingCache(): Promise<void> {
+        console.log(
+            `Invalidating ${this.postListCachekeys.size} list cache entries`,
+        );
+
+        for (const key of this.postListCachekeys) {
+            await this.cacheManager.del(key);
+        }
+
+        this.postListCachekeys.clear();
     }
 
     // Add a tag to a post
@@ -94,6 +193,8 @@ export class PostsService {
             findPostToAddTag.tags = [];
         }
         findPostToAddTag.tags.push(tag);
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         await this.postsRepository.save(findPostToAddTag);
         return findPostToAddTag;
     }
@@ -108,6 +209,8 @@ export class PostsService {
             throw new NotFoundException(`No tags found for post with id ${id}`);
         }
         removeTagFromPost.tags = removeTagFromPost.tags.filter(t => t !== tag);
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         await this.postsRepository.save(removeTagFromPost);
         return removeTagFromPost;
     }
@@ -126,6 +229,8 @@ export class PostsService {
             text: comment.text,
             date: comment.date ?? new Date(),
         });
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         await this.postsRepository.save(post);
         return post;
     }
@@ -140,6 +245,8 @@ export class PostsService {
             throw new NotFoundException(`Comment at index ${index} not found for post with id ${id}`);
         }
         post.comments.splice(index, 1);
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         await this.postsRepository.save(post);
         return post;
     }
@@ -153,6 +260,8 @@ export class PostsService {
             views: metadata.views ?? post.metadata?.views ?? 0,
             likes: metadata.likes ?? post.metadata?.likes ?? 0,
         };
+        await this.cacheManager.del(`post_${id}`);
+        await this.invalidateExistingCache()
         await this.postsRepository.save(post);
         return post;
     }

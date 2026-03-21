@@ -2,9 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { HelloModule } from './hello/hello.module';
-import { UserModule } from './user/user.module';
-import { OrderModule } from './order/order.module';
 import { ConfigModule } from '@nestjs/config';
 import { PostsController } from './posts/posts.controller';
 import { PostsService } from './posts/posts.service';
@@ -13,9 +10,26 @@ import { PostsModule } from './posts/posts.module';
 import appConfig from './config/app.config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Post } from './posts/entities/post.entity';
+import { AuthModule } from './auth/auth.module';
+import { User } from './auth/entities/user.entity';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
   imports: [
+    CacheModule.register({
+      ttl: 180, // 3 minutes
+      max: 100,
+      isGlobal: true
+    }),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60000,
+          limit: 10,
+        },
+      ],
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
       // validationSchema:joi.object({
@@ -33,11 +47,11 @@ import { Post } from './posts/entities/post.entity';
         username: configService.get<string>('DB_USERNAME'),
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_DATABASE'),
-        entities: [Post],
+        entities: [Post,User],
         synchronize: true,
       }),
     }),
-    HelloModule, UserModule, OrderModule, PostsModule
+    PostsModule, AuthModule
   ],
   controllers: [AppController, PostsController],
   providers: [AppService],

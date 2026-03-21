@@ -1,20 +1,23 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Put, Query, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Put, Query, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { User } from '../auth/entities/user.entity';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostExistsPipe } from './customPipes/postExists.pipe';
 import { Post as PostEntity } from './entities/post.entity';
+import { FindPostsQueryDto } from './dto/find-posts-query.dto';
+import { PaginatedResponse } from 'src/common/interfaces/paginated-response.interface';
 
 @Controller('posts')
 export class PostsController {
     constructor(private readonly postService: PostsService) { }
 
     @Get('')
-   async getAllPosts(@Query('title') title: string): Promise<PostEntity[]> {
-        if (title) {
-            return this.postService.findPostsByTitle(title);
-        }
-        return this.postService.findAllPosts();
+   async getAllPosts(
+    @Query() query: FindPostsQueryDto): Promise<PaginatedResponse<PostEntity>> {
+        return this.postService.findAllPosts(query);
     }
 
     @Get(':id')
@@ -24,6 +27,7 @@ export class PostsController {
 
     // example of creating a new post using POST method
     @Post()
+    @UseGuards(JwtAuthGuard)
     // @HttpCode(HttpStatus.CREATED) // Set the HTTP status code to 201 Created
     @HttpCode(HttpStatus.CREATED)
     //option 1: use global validation pipe in main.ts file
@@ -39,22 +43,34 @@ export class PostsController {
         new ValidationPipe({
            //add new options here if needed but it shouldn't be same as global options in main.ts file (to avoid confusion and conflicts)
         }))
-   async createPost(@Body() createPostData: CreatePostDto): Promise<PostEntity> {
-        return this.postService.createPost(createPostData);
+   async createPost(
+        @Body() createPostData: CreatePostDto,
+        @CurrentUser() user: User,
+    ): Promise<PostEntity> {
+        return this.postService.createPost(createPostData, user);
     }
 
     // example of updating an existing post using PUT method
     @Put(':id')
+    @UseGuards(JwtAuthGuard)
     @HttpCode(HttpStatus.OK) // Set the HTTP status code to 200 OK
-   async updatedPost(@Body() updatedPostData: UpdatePostDto, @Param('id', ParseIntPipe,PostExistsPipe) id: number): Promise<PostEntity> {
-        return this.postService.updatePost(id, updatedPostData);
+   async updatedPost(
+        @Body() updatedPostData: UpdatePostDto,
+        @Param('id', ParseIntPipe, PostExistsPipe) id: number,
+        @CurrentUser() user: User,
+    ): Promise<PostEntity> {
+        return this.postService.updatePost(id, updatedPostData, user);
     }
 
     // example of deleting a post using DELETE method
     @Delete(':id')
+    @UseGuards(JwtAuthGuard)
     @HttpCode(HttpStatus.OK)
-   async deletePost(@Param('id', ParseIntPipe, PostExistsPipe) id: number): Promise<string> {
-        return this.postService.deletePost(id);
+   async deletePost(
+        @Param('id', ParseIntPipe, PostExistsPipe) id: number,
+        @CurrentUser() user: User,
+    ): Promise<string> {
+        return this.postService.deletePost(id, user);
     }
 
     // Add a tag to a post
